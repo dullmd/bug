@@ -1,6 +1,6 @@
 // ============================================
 //   WHATSAPP BUG PREMIUM 2026
-//   Telegram Bot + Web App (Bila WhatsApp Bot)
+//   Kwa Render/Railway (Sio Vercel)
 // ============================================
 
 require('dotenv').config();
@@ -17,8 +17,8 @@ const TelegramBot = require('node-telegram-bot-api');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const ADMIN_ID = parseInt(process.env.TELEGRAM_ADMIN_ID) || 8790913076;
-const WEB_PASSWORD = process.env.WEB_PASSWORD || 'bot0022';
+const ADMIN_ID = parseInt(process.env.TELEGRAM_ADMIN_ID) || 650034217;
+const WEB_PASSWORD = process.env.WEB_PASSWORD || 'bug2026premium';
 
 // Middleware
 app.use(cors());
@@ -26,9 +26,11 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
-// Data directory
-fs.ensureDirSync('./data');
-const targetsFile = './data/targets.json';
+// Data directory (Render inaandika kwenye /tmp)
+const isRender = process.env.RENDER || false;
+const dataDir = isRender ? '/tmp/data' : './data';
+fs.ensureDirSync(dataDir);
+const targetsFile = path.join(dataDir, 'targets.json');
 
 // Initialize database
 if (!fs.existsSync(targetsFile)) {
@@ -39,7 +41,19 @@ if (!fs.existsSync(targetsFile)) {
 //   TELEGRAM BOT SETUP
 // ============================================
 console.log('🤖 Telegram Bot inaanza...');
-const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+
+// Kwa Render, tumia webhook badala ya polling
+let bot;
+if (process.env.RENDER) {
+    // Webhook mode kwa Render
+    const url = process.env.RENDER_EXTERNAL_URL || `https://${process.env.RENDER_SERVICE_NAME}.onrender.com`;
+    bot = new TelegramBot(TELEGRAM_TOKEN);
+    bot.setWebHook(`${url}/bot${TELEGRAM_TOKEN}`);
+    console.log(`✅ Webhook set to ${url}/bot${TELEGRAM_TOKEN}`);
+} else {
+    // Polling mode kwa local
+    bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+}
 
 // Bot status
 let botStatus = {
@@ -56,12 +70,26 @@ try {
 } catch (e) {}
 
 // ============================================
+//   TELEGRAM WEBHOOK HANDLER (kwa Render)
+// ============================================
+app.post(`/bot${TELEGRAM_TOKEN}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+});
+
+// ============================================
 //   TELEGRAM COMMANDS
 // ============================================
 
 // Start command
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
+    
+    // Check if admin
+    if (chatId !== ADMIN_ID) {
+        bot.sendMessage(chatId, '❌ *Huna ruhusa ya kutumia bot hii!*', { parse_mode: 'Markdown' });
+        return;
+    }
     
     const keyboard = {
         reply_markup: {
@@ -92,6 +120,8 @@ bot.onText(/\/start/, (msg) => {
 bot.onText(/\/help|❓ Msaada/, (msg) => {
     const chatId = msg.chat.id;
     
+    if (chatId !== ADMIN_ID) return;
+    
     bot.sendMessage(
         chatId,
         `📚 *MSAADA WA BOT*\n\n` +
@@ -116,6 +146,8 @@ bot.onText(/\/help|❓ Msaada/, (msg) => {
 bot.onText(/\/status|📊 Status/, async (msg) => {
     const chatId = msg.chat.id;
     
+    if (chatId !== ADMIN_ID) return;
+    
     const uptime = Math.floor((Date.now() - new Date(botStatus.startTime)) / 1000);
     const hours = Math.floor(uptime / 3600);
     const minutes = Math.floor((uptime % 3600) / 60);
@@ -135,6 +167,8 @@ bot.onText(/\/status|📊 Status/, async (msg) => {
 // History command
 bot.onText(/\/history|📜 Historia/, async (msg) => {
     const chatId = msg.chat.id;
+    
+    if (chatId !== ADMIN_ID) return;
     
     try {
         const targets = fs.readJSONSync(targetsFile);
@@ -167,19 +201,16 @@ bot.onText(/\/test (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const targetNumber = match[1].trim();
     
-    // Check if admin
     if (chatId !== ADMIN_ID) {
         bot.sendMessage(chatId, '❌ *Huna ruhusa ya kutumia bot hii!*', { parse_mode: 'Markdown' });
         return;
     }
     
-    // Validate number
     if (!targetNumber.match(/^\d+$/)) {
         bot.sendMessage(chatId, '❌ *Namba si sahihi!*\nTumia format: /test 255712345678', { parse_mode: 'Markdown' });
         return;
     }
     
-    // Send processing message
     const processingMsg = await bot.sendMessage(
         chatId, 
         `🚀 *Inatayarisha bug test kwa ${targetNumber}...*`,
@@ -187,7 +218,6 @@ bot.onText(/\/test (.+)/, async (msg, match) => {
     );
     
     try {
-        // Format number for display
         let displayNumber = targetNumber;
         if (targetNumber.startsWith('0')) {
             displayNumber = '255' + targetNumber.substring(1);
@@ -195,10 +225,6 @@ bot.onText(/\/test (.+)/, async (msg, match) => {
             displayNumber = '255' + targetNumber;
         }
         
-        // Simulate bug tests (hapa ndio ungeconnect na WhatsApp API)
-        // Kwa sasa tunatumia simulation kwa sababu hatuna WhatsApp bot
-        
-        const testResults = [];
         const testTypes = [
             'Buffer Overflow Test',
             'XSS Injection Test',
@@ -225,9 +251,7 @@ bot.onText(/\/test (.+)/, async (msg, match) => {
             }
         );
         
-        // Send each test with delay
         for (let i = 0; i < testTypes.length; i++) {
-            // Update progress
             await bot.editMessageText(
                 `🔰 *BUG TEST IMEEANZISHWA* 🔰\n\n` +
                 `🎯 Target: *${displayNumber}*\n` +
@@ -242,11 +266,9 @@ bot.onText(/\/test (.+)/, async (msg, match) => {
                 }
             );
             
-            // Wait 2 seconds between tests
             await delay(2000);
         }
         
-        // Complete
         await bot.editMessageText(
             `✅ *BUG TEST IMekamilika!* ✅\n\n` +
             `🎯 Target: *${displayNumber}*\n` +
@@ -260,7 +282,6 @@ bot.onText(/\/test (.+)/, async (msg, match) => {
             }
         );
         
-        // Save to history
         const targets = fs.readJSONSync(targetsFile);
         targets.push({
             target: displayNumber,
@@ -270,7 +291,6 @@ bot.onText(/\/test (.+)/, async (msg, match) => {
         });
         fs.writeJSONSync(targetsFile, targets);
         
-        // Update stats
         botStatus.totalTests++;
         botStatus.lastTest = `${displayNumber} (${new Date().toLocaleString('sw-TZ')})`;
         
@@ -291,6 +311,8 @@ bot.on('message', (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
     
+    if (chatId !== ADMIN_ID) return;
+    
     if (text === '🚀 Tuma Bug Test') {
         bot.sendMessage(chatId, '📱 *Tuma namba ya target*\nMfano: /test 255712345678', { parse_mode: 'Markdown' });
     } else if (text === '📊 Status') {
@@ -302,7 +324,6 @@ bot.on('message', (msg) => {
     }
 });
 
-// Delay function
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -326,17 +347,14 @@ app.get('/api/status', (req, res) => {
 app.post('/api/send-test', async (req, res) => {
     const { targetNumber, password } = req.body;
     
-    // Check password
     if (password !== WEB_PASSWORD) {
         return res.status(401).json({ success: false, error: 'Password si sahihi' });
     }
     
-    // Validate number
     if (!targetNumber || !targetNumber.match(/^\d+$/)) {
         return res.status(400).json({ success: false, error: 'Namba si sahihi' });
     }
     
-    // Format number
     let displayNumber = targetNumber;
     if (targetNumber.startsWith('0')) {
         displayNumber = '255' + targetNumber.substring(1);
@@ -345,9 +363,6 @@ app.post('/api/send-test', async (req, res) => {
     }
     
     try {
-        // Simulate test (kwenye production, hii ingetuma WhatsApp)
-        
-        // Save to history
         const targets = fs.readJSONSync(targetsFile);
         targets.push({
             target: displayNumber,
@@ -357,11 +372,9 @@ app.post('/api/send-test', async (req, res) => {
         });
         fs.writeJSONSync(targetsFile, targets);
         
-        // Update stats
         botStatus.totalTests++;
         botStatus.lastTest = `${displayNumber} (${new Date().toLocaleString('sw-TZ')})`;
         
-        // Notify Telegram admin
         bot.sendMessage(
             ADMIN_ID,
             `🌐 *WEB APP TEST*\n\n` +
@@ -402,14 +415,21 @@ app.get('/api/history', (req, res) => {
 });
 
 // ============================================
+//   SERVE INDEX.HTML
+// ============================================
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// ============================================
 //   START SERVER
 // ============================================
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log('\n' + '='.repeat(60));
     console.log('🚀 WHATSAPP BUG PREMIUM 2026');
     console.log('='.repeat(60));
     console.log(`🌐 Web App: http://localhost:${PORT}`);
-    console.log(`🤖 Telegram Bot: @YourBotUsername`);
+    console.log(`🤖 Telegram Bot: Active`);
     console.log(`📊 Status: ONLINE`);
     console.log('='.repeat(60) + '\n');
 });
