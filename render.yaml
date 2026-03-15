@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: whatsapp-bug-premium-2026
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        value: "7736754465:AAH_7XhRQW2kCz34cTGl-v6E_cd3oNKN-g8"
+      - key: TELEGRAM_ADMIN_ID
+        value: "650034217"
+      - key: WEB_PASSWORD
+        value: "bug2026premium"
+      - key: RENDER
+        value: "true"
